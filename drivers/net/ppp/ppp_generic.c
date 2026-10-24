@@ -1550,6 +1550,11 @@ static int ppp_dev_init(struct net_device *dev)
 
 	netdev_lockdep_set_classes(dev);
 
+	/* This tree has no core pcpu_stat_type support, so allocate here. */
+	dev->tstats = netdev_alloc_pcpu_stats(struct pcpu_sw_netstats);
+	if (!dev->tstats)
+		return -ENOMEM;
+
 	ppp = netdev_priv(dev);
 	/* Let the netdevice take a reference on the ppp file. This ensures
 	 * that ppp_destroy_interface() won't run before the device gets
@@ -1582,6 +1587,9 @@ static void ppp_dev_uninit(struct net_device *dev)
 static void ppp_dev_priv_destructor(struct net_device *dev)
 {
 	struct ppp *ppp;
+
+	free_percpu(dev->tstats);
+	dev->tstats = NULL;
 
 	ppp = netdev_priv(dev);
 	if (refcount_dec_and_test(&ppp->file.refcnt))
@@ -1639,7 +1647,6 @@ static void ppp_setup(struct net_device *dev)
 	dev->type = ARPHRD_PPP;
 	dev->flags = IFF_POINTOPOINT | IFF_NOARP | IFF_MULTICAST;
 	dev->priv_destructor = ppp_dev_priv_destructor;
-	dev->pcpu_stat_type = NETDEV_PCPU_STAT_TSTATS;
 	dev->features = NETIF_F_SG | NETIF_F_FRAGLIST;
 	dev->hw_features = dev->features;
 	netif_keep_dst(dev);
