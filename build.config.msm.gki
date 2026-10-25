@@ -47,6 +47,10 @@ append_cmd POST_DEFCONFIG_CMDS 'sanity_check_abi'
 function build_defconfig_fragments() {
 	if [[ "${VARIANT}" =~ ^(gki|consolidate)$ ]]; then
 		apply_defconfig_fragment ${KERNEL_DIR}/arch/${ARCH}/configs/vendor/${MSM_ARCH}_GKI.config vendor/${MSM_ARCH}-gki_defconfig
+		# OnePlus features and the caihong device fragment. kleaf sources this
+		# file without the kernel sources, so the fragments cannot be tested here.
+		apply_defconfig_fragment ${KERNEL_DIR}/arch/${ARCH}/configs/vendor/oplus/${MSM_ARCH}_GKI.config
+		apply_defconfig_fragment ${KERNEL_DIR}/arch/${ARCH}/configs/vendor/oplus/caihong.config
 		if [ "${VARIANT}" = gki ]; then
 			return
 		fi

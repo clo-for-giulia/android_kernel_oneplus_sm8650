@@ -12,7 +12,7 @@ import sys
 import subprocess
 
 HOST_TARGETS = ["dtc"]
-DEFAULT_SKIP_LIST = ["abi"]
+DEFAULT_SKIP_LIST = ["abi", "abl"]
 MSM_EXTENSIONS = "build/msm_kernel_extensions.bzl"
 ABL_EXTENSIONS = "build/abl_extensions.bzl"
 DEFAULT_MSM_EXTENSIONS_SRC = "../msm-kernel/msm_kernel_extensions.bzl"
@@ -307,6 +307,19 @@ class BazelBuilder:
         self.user_opts.extend([
             "--user_kmi_symbol_lists=//msm-kernel:android/abi_gki_aarch64_qcom",
             "--ignore_missing_projects",
+            # Export every symbol like the make based caihong kernel did
+            # (no TRIM_UNUSED_KSYMS). The out of tree techpack and oplus
+            # modules are built later and are not covered by the KMI lists,
+            # which also still name the del_timer*() wrappers of 6.1.190.
+            "--notrim",
+            "--nokmi_symbol_list_strict_mode",
+            "--nokmi_symbol_list_violations_check",
+            # Build with the clang of the Android tree, like the make based
+            # caihong kernel (clang 22, r584948), instead of the clang 17 of
+            # kernel_platform. build.config.common matches it for the
+            # modules built outside of bazel.
+            "--user_clang_toolchain={}".format(os.path.realpath(os.path.join(
+                self.workspace, "..", "prebuilts/clang/host/linux-x86/clang-r584948"))),
         ])
 
         if self.dry_run:

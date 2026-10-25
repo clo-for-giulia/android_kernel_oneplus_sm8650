@@ -53,6 +53,11 @@ KCFLAGS
 -------
 Additional options to the C compiler (for built-in and modules).
 
+KLDFLAGS
+--------
+Additional options to the linker (for built-in and modules), for example
+LTO code generation options such as -mllvm flags.
+
 KRUSTFLAGS
 ----------
 Additional options to the Rust compiler (for built-in and modules).
