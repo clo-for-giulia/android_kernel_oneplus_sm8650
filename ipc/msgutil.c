@@ -182,3 +182,5 @@ void free_msg(struct msg_msg *msg)
 		seg = tmp;
 	}
 }
+
+EXPORT_SYMBOL_GPL(init_ipc_ns);
