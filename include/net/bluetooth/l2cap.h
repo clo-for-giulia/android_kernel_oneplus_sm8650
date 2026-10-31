@@ -29,7 +29,6 @@
 
 #include <asm/unaligned.h>
 #include <linux/atomic.h>
-#include <linux/android_kabi.h>
 
 /* L2CAP defaults */
 #define L2CAP_DEFAULT_MTU		672
@@ -509,14 +508,6 @@ struct l2cap_seq_list {
 
 struct l2cap_chan {
 	struct l2cap_conn	*conn;
-
-	/*
-	 * These 2 fields were removed by 78e40feaee07 ("UPSTREAM: Bluetooth: Remove BT_HS")
-	 * Restored for KMI compliance.
-	 */
-	struct hci_conn         *hs_hcon;
-	struct hci_chan         *hs_hchan;
-
 	struct kref	kref;
 	atomic_t	nesting;
 
@@ -560,22 +551,15 @@ struct l2cap_chan {
 	__u16		tx_credits;
 	__u16		rx_credits;
 
+	/* estimated available receive buffer space or -1 if unknown */
+	ssize_t		rx_avail;
+
 	__u8		tx_state;
 	__u8		rx_state;
 
 	unsigned long	conf_state;
 	unsigned long	conn_state;
 	unsigned long	flags;
-
-	/*
-	 * These 5 fields were removed by 78e40feaee07 ("UPSTREAM: Bluetooth: Remove BT_HS")
-	 * Restored for KMI compliance.
-	 */
-	__u8            remote_amp_id;
-	__u8            local_amp_id;
-	__u8            move_id;
-	__u8            move_state;
-	__u8            move_role;
 
 	__u16		next_tx_seq;
 	__u16		expected_ack_seq;
@@ -625,15 +609,13 @@ struct l2cap_chan {
 	void			*data;
 	const struct l2cap_ops	*ops;
 	struct mutex		lock;
-
-	ANDROID_KABI_RESERVE(1);
-	ANDROID_KABI_RESERVE(2);
 };
 
 struct l2cap_ops {
 	char			*name;
 
-	struct l2cap_chan	*(*new_connection) (struct l2cap_chan *chan);
+	int			(*new_connection)(struct l2cap_chan *chan,
+						  struct l2cap_chan *new_chan);
 	int			(*recv) (struct l2cap_chan * chan,
 					 struct sk_buff *skb);
 	void			(*teardown) (struct l2cap_chan *chan, int err);
@@ -652,9 +634,6 @@ struct l2cap_ops {
 					       unsigned long len, int nb);
 	int			(*filter) (struct l2cap_chan * chan,
 					   struct sk_buff *skb);
-
-	ANDROID_KABI_RESERVE(1);
-	ANDROID_KABI_RESERVE(2);
 };
 
 struct l2cap_conn {
@@ -674,8 +653,8 @@ struct l2cap_conn {
 
 	struct sk_buff		*rx_skb;
 	__u32			rx_len;
+	struct ida		tx_ida;
 	__u8			tx_ident;
-	struct mutex		ident_lock;
 
 	struct sk_buff_head	pending_rx;
 	struct work_struct	pending_rx_work;
@@ -690,9 +669,6 @@ struct l2cap_conn {
 	struct mutex		chan_lock;
 	struct kref		ref;
 	struct list_head	users;
-
-	ANDROID_KABI_RESERVE(1);
-	ANDROID_KABI_RESERVE(2);
 };
 
 struct l2cap_user {
@@ -713,10 +689,20 @@ struct l2cap_user {
 /* ----- L2CAP socket info ----- */
 #define l2cap_pi(sk) ((struct l2cap_pinfo *) sk)
 
+struct l2cap_rx_busy {
+	struct list_head	list;
+	struct sk_buff		*skb;
+};
+
 struct l2cap_pinfo {
 	struct bt_sock		bt;
+
+	/* With owning sk_socket chan may be read without lock, other access
+	 * should hold lock_sock.
+	 */
 	struct l2cap_chan	*chan;
-	struct sk_buff		*rx_busy_skb;
+
+	struct list_head	rx_busy;
 };
 
 enum {
@@ -899,9 +885,10 @@ static inline __u16 __next_seq(struct l2cap_chan *chan, __u16 seq)
 	return (seq + 1) % (chan->tx_win_max + 1);
 }
 
-static inline struct l2cap_chan *l2cap_chan_no_new_connection(struct l2cap_chan *chan)
+static inline int l2cap_chan_no_new_connection(struct l2cap_chan *chan,
+					       struct l2cap_chan *new_chan)
 {
-	return NULL;
+	return -EOPNOTSUPP;
 }
 
 static inline int l2cap_chan_no_recv(struct l2cap_chan *chan, struct sk_buff *skb)
@@ -975,8 +962,9 @@ int l2cap_chan_connect(struct l2cap_chan *chan, __le16 psm, u16 cid,
 int l2cap_chan_reconfigure(struct l2cap_chan *chan, __u16 mtu);
 int l2cap_chan_send(struct l2cap_chan *chan, struct msghdr *msg, size_t len);
 void l2cap_chan_busy(struct l2cap_chan *chan, int busy);
+void l2cap_chan_rx_avail(struct l2cap_chan *chan, ssize_t rx_avail);
 int l2cap_chan_check_security(struct l2cap_chan *chan, bool initiator);
-void l2cap_chan_set_defaults(struct l2cap_chan *chan);
+void l2cap_chan_set_defaults(struct l2cap_chan *chan, struct l2cap_chan *pchan);
 int l2cap_ertm_init(struct l2cap_chan *chan);
 void l2cap_chan_add(struct l2cap_conn *conn, struct l2cap_chan *chan);
 void __l2cap_chan_add(struct l2cap_conn *conn, struct l2cap_chan *chan);
