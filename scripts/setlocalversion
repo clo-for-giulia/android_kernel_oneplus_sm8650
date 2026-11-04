@@ -170,4 +170,12 @@ if test -n "${BUILD_NUMBER}"; then
 	res="$res-ab${BUILD_NUMBER}"
 fi
 
+# identify the exact source revision, unless setlocalversion already did
+if head=$(git -C "$srctree" rev-parse --short=12 HEAD 2>/dev/null); then
+	case "$res" in
+		*"-g${head}"*) : ;;
+		*) res="${res}-g${head}" ;;
+	esac
+fi
+
 echo "$res"
